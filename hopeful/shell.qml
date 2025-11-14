@@ -654,17 +654,14 @@ PanelWindow {
 
                 property string batteryIcon: {
                     if (!hasBattery)
-                        return "O";
-                    const p = percentage;
-                    if (p <= .10)
-                        return "~";
-                    if (p <= .25)
-                        return "+";
-                    if (p <= .50)
-                        return "*";
-                    if (p <= .75)
-                        return "@";
-                    return "%";
+                        return "AC";
+                    const p = Math.max(0, Math.min(1, percentage));
+                    const bars = ["⚠", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+                    const idx = Math.min(bars.length - 1, Math.floor(p * bars.length));
+                    // Add a clear battery emoji plus a bar and a warning for very low charge
+                    if (p <= 0.10)
+                        return bars[idx];
+                    return bars[idx];
                 }
 
                 property color batteryColor: {
