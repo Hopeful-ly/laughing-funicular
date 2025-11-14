@@ -441,130 +441,163 @@ PanelWindow {
                 color: "transparent"
                 clip: true
 
+                // Track if content is overflowing
+                property bool hasOverflow: trayRow.implicitWidth > width
+                property int overflowCount: {
+                    if (!hasOverflow)
+                        return 0;
+                    const itemWidth = 22 + 6; // delegate width + spacing
+                    const availableItems = Math.floor((width - 30) / itemWidth); // reserve space for "+N"
+                    return Math.max(0, SystemTray.items.length - availableItems);
+                }
+
                 RowLayout {
                     id: trayRow
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 6
                     anchors.left: parent.left
                     anchors.right: parent.right
-                }
 
-                Repeater {
-                    id: trayRepeater
-                    model: SystemTray.items   // list<SystemTrayItem>
+                    Repeater {
+                        id: trayRepeater
+                        model: SystemTray.items   // list<SystemTrayItem>
 
-                    delegate: Item {
-                        id: trayItemDelegate
-                        width: 22
-                        height: 22
+                        delegate: Item {
+                            id: trayItemDelegate
+                            width: 22
+                            height: 22
 
-                        readonly property var trayItem: modelData
+                            readonly property var trayItem: modelData
 
-                        // Helper to show system tray menu at a sane position
-                        function showTrayMenu() {
-                            if (!trayItem.hasMenu)
-                                return;
-                            const pt = trayItemDelegate.mapToItem(root, width / 2, height);
-                            trayItem.display(root, Math.round(pt.x), Math.round(pt.y));
-                        }
+                            // Helper to show system tray menu at a sane position
+                            function showTrayMenu() {
+                                if (!trayItem.hasMenu)
+                                    return;
+                                const pt = trayItemDelegate.mapToItem(root, width / 2, height);
+                                trayItem.display(root, Math.round(pt.x), Math.round(pt.y));
+                            }
 
-                        // --- Background + icon ------------------------------------------
-                        Rectangle {
-                            id: trayBg
-                            anchors.fill: parent
-                            radius: 4
-                            color: (hoverHandler.hovered) ? "#0b1625" : "transparent"
-                            border.width: (hoverHandler.hovered) ? 1 : 0
-                            border.color: root.accentSoft
-                            antialiasing: true
-                        }
+                            // --- Background + icon ------------------------------------------
+                            Rectangle {
+                                id: trayBg
+                                anchors.fill: parent
+                                radius: 4
+                                color: (hoverHandler.hovered) ? "#0b1625" : "transparent"
+                                border.width: (hoverHandler.hovered) ? 1 : 0
+                                border.color: root.accentSoft
+                                antialiasing: true
+                            }
 
-                        /* Constrain icon rendering so an unexpected large source
+                            /* Constrain icon rendering so an unexpected large source
                            (e.g. an emoji fallback) will be scaled down and
                            centered rather than overflowing. */
-                        Item {
-                            anchors.fill: parent
-                            anchors.margins: 2
-                            anchors.centerIn: parent
-
-                            IconImage {
-                                id: trayIcon
+                            Item {
+                                anchors.fill: parent
+                                anchors.margins: 2
                                 anchors.centerIn: parent
-                                width: Math.min(parent.width, parent.height)
-                                height: Math.min(parent.width, parent.height)
-                                source: trayItem.icon
-                                smooth: true
+
+                                IconImage {
+                                    id: trayIcon
+                                    anchors.centerIn: parent
+                                    width: Math.min(parent.width, parent.height)
+                                    height: Math.min(parent.width, parent.height)
+                                    source: trayItem.icon
+                                    smooth: true
+                                }
                             }
-                        }
 
-                        // --- Hover highlight --------------------------------------------
-                        HoverHandler {
-                            id: hoverHandler
-                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                            cursorShape: Qt.PointingHandCursor
-                        }
+                            // --- Hover highlight --------------------------------------------
+                            HoverHandler {
+                                id: hoverHandler
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                cursorShape: Qt.PointingHandCursor
+                            }
 
-                        // --- MAIN TAP HANDLER (left + middle + long-press) --------------
-                        TapHandler {
-                            id: mainTap
-                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                            gesturePolicy: TapHandler.DragThreshold
-                            longPressThreshold: 400
+                            // --- MAIN TAP HANDLER (left + middle + long-press) --------------
+                            TapHandler {
+                                id: mainTap
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                                gesturePolicy: TapHandler.DragThreshold
+                                longPressThreshold: 400
 
-                            onTapped: function (point) {
-                                if (point.button === Qt.LeftButton) {
-                                    if (trayItem.onlyMenu && trayItem.hasMenu) {
+                                onTapped: function (point) {
+                                    if (point.button === Qt.LeftButton) {
+                                        if (trayItem.onlyMenu && trayItem.hasMenu) {
+                                            trayItemDelegate.showTrayMenu();
+                                        } else {
+                                            trayItem.activate();
+                                        }
+                                    } else if (point.button === Qt.MiddleButton) {
+                                        // Middle click → secondaryActivate
+                                        trayItem.secondaryActivate();
+                                    }
+                                }
+
+                                onDoubleTapped: function (point) {
+                                    if (point.button === Qt.LeftButton && !trayItem.onlyMenu)
+                                        trayItem.activate();
+                                }
+
+                                onLongPressed: function (point) {
+                                    // Long press as context menu fallback
+                                    if (trayItem.hasMenu)
+                                        trayItemDelegate.showTrayMenu();
+                                }
+                            }
+
+                            // --- RIGHT CLICK / two-finger tap (context menu) ----------------
+                            TapHandler {
+                                id: contextTap
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                acceptedButtons: Qt.RightButton
+                                gesturePolicy: TapHandler.DragThreshold
+
+                                onTapped: function (point) {
+                                    if (trayItem.hasMenu) {
                                         trayItemDelegate.showTrayMenu();
                                     } else {
-                                        trayItem.activate();
+                                        // Fallback when no menu but right-click is used
+                                        trayItem.secondaryActivate();
                                     }
-                                } else if (point.button === Qt.MiddleButton) {
-                                    // Middle click → secondaryActivate
-                                    trayItem.secondaryActivate();
                                 }
                             }
 
-                            onDoubleTapped: function (point) {
-                                if (point.button === Qt.LeftButton && !trayItem.onlyMenu)
-                                    trayItem.activate();
-                            }
-
-                            onLongPressed: function (point) {
-                                // Long press as context menu fallback
-                                if (trayItem.hasMenu)
-                                    trayItemDelegate.showTrayMenu();
-                            }
-                        }
-
-                        // --- RIGHT CLICK / two-finger tap (context menu) ----------------
-                        TapHandler {
-                            id: contextTap
-                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                            acceptedButtons: Qt.RightButton
-                            gesturePolicy: TapHandler.DragThreshold
-
-                            onTapped: function (point) {
-                                if (trayItem.hasMenu) {
-                                    trayItemDelegate.showTrayMenu();
-                                } else {
-                                    // Fallback when no menu but right-click is used
-                                    trayItem.secondaryActivate();
+                            // --- WHEEL (scroll actions – volume, brightness, etc.) ----------
+                            WheelHandler {
+                                id: wheelHandler
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                onWheel: function (wheel) {
+                                    const delta = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.angleDelta.x;
+                                    const horizontal = (wheel.angleDelta.y === 0);
+                                    trayItem.scroll(delta, horizontal);
+                                    wheel.accepted = true;
                                 }
                             }
-                        }
+                        }  // end delegate Item
+                    }  // end Repeater
+                }  // end RowLayout
 
-                        // --- WHEEL (scroll actions – volume, brightness, etc.) ----------
-                        WheelHandler {
-                            id: wheelHandler
-                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                            onWheel: function (wheel) {
-                                const delta = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.angleDelta.x;
-                                const horizontal = (wheel.angleDelta.y === 0);
-                                trayItem.scroll(delta, horizontal);
-                                wheel.accepted = true;
-                            }
-                        }
+                // Overflow indicator overlay (shows "+N" when items are clipped)
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 28
+                    height: 22
+                    radius: 4
+                    color: "#0a1420"
+                    border.width: 1
+                    border.color: root.warningColor
+                    visible: trayRoot.hasOverflow && trayRoot.overflowCount > 0
+                    opacity: 0.95
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "+" + trayRoot.overflowCount
+                        color: root.warningColor
+                        font.pixelSize: 10
+                        font.bold: true
+                        font.family: root.panelFont
                     }
                 }
             }
