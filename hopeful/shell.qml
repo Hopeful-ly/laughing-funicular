@@ -924,7 +924,8 @@ PanelWindow {
     }
 
     Timer {
-        interval: 30 * 1000
+        // Check every 2 seconds when not online, otherwise every 2 minutes
+        interval: root.twingateConnected === "online" ? 2 * 60 * 1000 : 2 * 1000
         running: true
         repeat: true
         onTriggered: netProc.running = true
