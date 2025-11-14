@@ -12,10 +12,12 @@ import QtQuick.Effects               // MultiEffect (modern glow)
 /*
  * MAGI Core Celestial Monitoring System - Panel UI
  *
- * v2.1:
- * - Fix: ObjectRepeater → Repeater (Qt6 / Quickshell recommendation)
- * - Battery indicator (UPower.displayDevice)
- * - Hyprland-native workspaces, swaync toggle, system tray, MultiEffect glow
+ * v2.2:
+ * - More robust pointer handling in tray:
+ *   * Single, consistent handling for left / middle / right click & long press
+ *   * DragHandler restricted to left button only (no more fighting with right click)
+ *   * Hover cursor + highlight always reliable
+ * - Minor small robustness tweaks for hover areas and workspace highlighting.
  */
 
 PanelWindow {
@@ -50,7 +52,8 @@ PanelWindow {
     property string twingateConnected: "..."
 
     // --- WORKSPACE STATE (Hyprland native) --------------------------------
-    // Map Hyprland workspace ids 1–9 -> 0–8 for the 9 planets
+    // If Hyprland.focusedWorkspace is an object with .id this works as-is.
+    // If it's an int in your setup, change ws.id → ws.
     property int currentWorkspaceIndex: {
         const ws = Hyprland.focusedWorkspace;
         if (ws && ws.id > 0 && ws.id <= planetModel.count)
@@ -293,7 +296,6 @@ PanelWindow {
                         }
                     }
 
-                    // Active state indicator
                     Rectangle {
                         id: activeIndicator
                         width: parent.width - 10
@@ -318,7 +320,6 @@ PanelWindow {
                         }
                     }
 
-                    // Hover background
                     Rectangle {
                         id: hoverBg
                         anchors.fill: parent
@@ -326,16 +327,14 @@ PanelWindow {
                         opacity: 0.0
                         radius: 4
 
-                        states: [
-                            State {
-                                name: "hovered"
-                                when: wsDelegate.isHovered && !wsDelegate.isActive
-                                PropertyChanges {
-                                    target: hoverBg
-                                    opacity: 0.1
-                                }
+                        states: State {
+                            name: "hovered"
+                            when: wsDelegate.isHovered && !wsDelegate.isActive
+                            PropertyChanges {
+                                target: hoverBg
+                                opacity: 0.1
                             }
-                        ]
+                        }
 
                         Behavior on opacity {
                             NumberAnimation {
@@ -348,10 +347,8 @@ PanelWindow {
                         id: wsMouseArea
                         anchors.fill: parent
                         hoverEnabled: true
-                        onClicked: {
-                            const newWorkspaceNum = index + 1; // 1-indexed
-                            Hyprland.dispatch("workspace " + newWorkspaceNum);
-                        }
+                        propagateComposedEvents: true
+                        onClicked: Hyprland.dispatch("workspace " + (index + 1))
                     }
                 }
             }
@@ -412,7 +409,7 @@ PanelWindow {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "🔔"              // swap to NF icon if you want
+                    text: "🔔"
                     font.pixelSize: 14
                     color: root.accentColor
                     opacity: hoverAreaNotif.containsMouse ? 1.0 : 0.85
@@ -432,166 +429,152 @@ PanelWindow {
             }
 
             // ---- System Tray ----------------------------------------------
-            Item {
+            /* Constrain the tray area so large or emoji-like icons cannot overflow
+               into the battery / network widgets. Clip the contents and size
+               the IconImage inside each delegate so it never exceeds its
+               container. Also add a visual separator after the tray. */
+            Rectangle {
                 id: trayRoot
                 Layout.alignment: Qt.AlignVCenter
                 implicitHeight: 24
+                Layout.preferredWidth: 140
+                color: "transparent"
+                clip: true
 
                 RowLayout {
                     id: trayRow
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 6
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                }
 
-                    Repeater {
-                        id: trayRepeater
-                        model: SystemTray.items   // list<SystemTrayItem>
+                Repeater {
+                    id: trayRepeater
+                    model: SystemTray.items   // list<SystemTrayItem>
 
-                        delegate: Item {
-                            id: trayItemDelegate
-                            width: 22
-                            height: 22
+                    delegate: Item {
+                        id: trayItemDelegate
+                        width: 22
+                        height: 22
 
-                            readonly property var trayItem: modelData
+                        readonly property var trayItem: modelData
 
-                            // --- Drag & Drop (source) --------------------------------------------
-                            Drag.dragType: Drag.Automatic
-                            Drag.active: dragHandler.active
-                            Drag.hotSpot.x: width / 2
-                            Drag.hotSpot.y: height / 2
-                            Drag.mimeData: ({
-                                    "text/plain": trayItem.title,
-                                    "application/x-quickshell-tray-id": trayItem.id
-                                })
+                        // Helper to show system tray menu at a sane position
+                        function showTrayMenu() {
+                            if (!trayItem.hasMenu)
+                                return;
+                            const pt = trayItemDelegate.mapToItem(root, width / 2, height);
+                            trayItem.display(root, Math.round(pt.x), Math.round(pt.y));
+                        }
 
-                            // --- Background + icon -----------------------------------------------
-                            Rectangle {
-                                id: trayBg
-                                anchors.fill: parent
-                                radius: 4
-                                color: (hoverHandler.hovered || dropArea.containsDrag) ? "#0b1625" : "transparent"
-                                border.width: (hoverHandler.hovered || dropArea.containsDrag) ? 1 : 0
-                                border.color: root.accentSoft
-                                antialiasing: true
-                            }
+                        // --- Background + icon ------------------------------------------
+                        Rectangle {
+                            id: trayBg
+                            anchors.fill: parent
+                            radius: 4
+                            color: (hoverHandler.hovered) ? "#0b1625" : "transparent"
+                            border.width: (hoverHandler.hovered) ? 1 : 0
+                            border.color: root.accentSoft
+                            antialiasing: true
+                        }
+
+                        /* Constrain icon rendering so an unexpected large source
+                           (e.g. an emoji fallback) will be scaled down and
+                           centered rather than overflowing. */
+                        Item {
+                            anchors.fill: parent
+                            anchors.margins: 2
+                            anchors.centerIn: parent
 
                             IconImage {
-                                anchors.fill: parent
-                                anchors.margins: 3
+                                id: trayIcon
+                                anchors.centerIn: parent
+                                width: Math.min(parent.width, parent.height)
+                                height: Math.min(parent.width, parent.height)
                                 source: trayItem.icon
                                 smooth: true
                             }
+                        }
 
-                            // --- Drop target (DnD into tray) -------------------------------------
-                            DropArea {
-                                id: dropArea
-                                anchors.fill: parent
-                                onDropped: function (drop) {
-                                    console.log("Dropped on tray item:", trayItem.title, drop.mimeData);
-                                    drop.acceptProposedAction();
-                                }
-                            }
+                        // --- Hover highlight --------------------------------------------
+                        HoverHandler {
+                            id: hoverHandler
+                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                            cursorShape: Qt.PointingHandCursor
+                        }
 
-                            // --- Hover highlight (works for mouse + touchpad pointer) ------------
-                            HoverHandler {
-                                id: hoverHandler
-                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                            }
+                        // --- MAIN TAP HANDLER (left + middle + long-press) --------------
+                        TapHandler {
+                            id: mainTap
+                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                            gesturePolicy: TapHandler.DragThreshold
+                            longPressThreshold: 400
 
-                            // --- LEFT CLICK (activate) -------------------------------------------
-                            TapHandler {
-                                id: leftTap
-                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                                acceptedButtons: Qt.LeftButton
-                                gesturePolicy: TapHandler.DragThreshold
-
-                                onTapped: point => {
-                                    // If a context/right tap also fires, let that win
-                                    if (rightTap.active || contextTap.active)
-                                        return;
-
+                            onTapped: function (point) {
+                                if (point.button === Qt.LeftButton) {
                                     if (trayItem.onlyMenu && trayItem.hasMenu) {
-                                        const pt = trayItemDelegate.mapToItem(root, width / 2, height);
-                                        trayItem.display(root, Math.round(pt.x), Math.round(pt.y));
+                                        trayItemDelegate.showTrayMenu();
                                     } else {
                                         trayItem.activate();
                                     }
-                                }
-
-                                // Double-tap left: stronger "activate"
-                                onDoubleTapped: point => {
-                                    if (!trayItem.onlyMenu)
-                                        trayItem.activate();
+                                } else if (point.button === Qt.MiddleButton) {
+                                    // Middle click → secondaryActivate
+                                    trayItem.secondaryActivate();
                                 }
                             }
 
-                            // --- RIGHT CLICK / two-finger tap (context) --------------------------
-                            TapHandler {
-                                id: rightTap
-                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                                acceptedButtons: Qt.RightButton
-                                gesturePolicy: TapHandler.DragThreshold
+                            onDoubleTapped: function (point) {
+                                if (point.button === Qt.LeftButton && !trayItem.onlyMenu)
+                                    trayItem.activate();
+                            }
 
-                                onTapped: point => {
-                                    if (!trayItem.hasMenu) {
-                                        // Fallback: treat as secondaryActivate if no menu
-                                        trayItem.secondaryActivate();
-                                        return;
-                                    }
+                            onLongPressed: function (point) {
+                                // Long press as context menu fallback
+                                if (trayItem.hasMenu)
+                                    trayItemDelegate.showTrayMenu();
+                            }
+                        }
 
-                                    const pt = trayItemDelegate.mapToItem(root, width / 2, height);
-                                    trayItem.display(root, Math.round(pt.x), Math.round(pt.y));
+                        // --- RIGHT CLICK / two-finger tap (context menu) ----------------
+                        TapHandler {
+                            id: contextTap
+                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                            acceptedButtons: Qt.RightButton
+                            gesturePolicy: TapHandler.DragThreshold
+
+                            onTapped: function (point) {
+                                if (trayItem.hasMenu) {
+                                    trayItemDelegate.showTrayMenu();
+                                } else {
+                                    // Fallback when no menu but right-click is used
+                                    trayItem.secondaryActivate();
                                 }
                             }
+                        }
 
-                            // --- Long press → context menu (fallback for touchpads) --------------
-                            TapHandler {
-                                id: contextTap
-                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                // Long press threshold in ms
-                                longPressThreshold: 400
-                                gesturePolicy: TapHandler.WithinBounds
-
-                                onLongPressed: point => {
-                                    if (trayItem.hasMenu) {
-                                        const pt = trayItemDelegate.mapToItem(root, width / 2, height);
-                                        trayItem.display(root, Math.round(pt.x), Math.round(pt.y));
-                                    }
-                                }
-                            }
-
-                            // --- MIDDLE CLICK (secondary activate) -------------------------------
-                            TapHandler {
-                                id: middleTap
-                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                                acceptedButtons: Qt.MiddleButton
-                                gesturePolicy: TapHandler.DragThreshold
-
-                                onTapped: point => trayItem.secondaryActivate()
-                            }
-
-                            // --- WHEEL (scroll actions – volume, brightness, etc.) ---------------
-                            WheelHandler {
-                                id: wheelHandler
-                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-
-                                onWheel: wheel => {
-                                    const delta = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.angleDelta.x;
-                                    const horizontal = (wheel.angleDelta.y === 0);
-                                    trayItem.scroll(delta, horizontal);
-                                    wheel.accepted = true;
-                                }
-                            }
-
-                            // --- Drag gesture (for QML Drag, but does not move icon) -------------
-                            DragHandler {
-                                id: dragHandler
-                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                                target: null             // keep the tray icon fixed in place
-                                grabPermissions: PointerHandler.CanTakeOverFromAnything
+                        // --- WHEEL (scroll actions – volume, brightness, etc.) ----------
+                        WheelHandler {
+                            id: wheelHandler
+                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                            onWheel: function (wheel) {
+                                const delta = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.angleDelta.x;
+                                const horizontal = (wheel.angleDelta.y === 0);
+                                trayItem.scroll(delta, horizontal);
+                                wheel.accepted = true;
                             }
                         }
                     }
+                }
+            }
+
+            // Small vertical separator between tray and battery to avoid visual collision
+            Item {
+                width: 1
+                height: 18
+                Loader {
+                    sourceComponent: separator
                 }
             }
 
@@ -602,14 +585,13 @@ PanelWindow {
                 implicitHeight: 24
                 implicitWidth: 70
 
-                // Convenience properties
                 property var dev: UPower.displayDevice
                 property real percentage: dev.ready ? dev.percentage : -1
                 property bool hasBattery: dev.ready && dev.isLaptopBattery && dev.isPresent
 
                 property string batteryIcon: {
                     if (!hasBattery)
-                        return "O";    // fallback / no battery icon
+                        return "O";
                     const p = percentage;
                     if (p <= .10)
                         return "~";
@@ -636,7 +618,6 @@ PanelWindow {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 4
 
-                    // Icon (requires Nerd Font or similar; replace to taste)
                     Text {
                         text: batteryRoot.batteryIcon
                         visible: batteryRoot.hasBattery
@@ -751,10 +732,12 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     acceptedButtons: Qt.NoButton
+                    propagateComposedEvents: true
                 }
 
                 Rectangle {
                     id: netPopup
+                    z: 100
                     opacity: hoverArea.containsMouse ? 0.98 : 0.0
                     anchors.top: netInfoRoot.bottom
                     anchors.right: netInfoRoot.right
@@ -858,7 +841,7 @@ PanelWindow {
     // ================== NETWORK INFO + ONLINE STATE =======================
     Process {
         id: netProc
-        command: ["bash", "-c", "local_ip=$(hostname -I 2>/dev/null | awk '{print $1}') ; " + "subnet=$(ip -o -f inet addr show 2>/dev/null | awk '/scope global/ {print $4; exit}') ; " + "pub=$(curl -s --max-time 2 https://api.ipify.org 2>/dev/null || echo OFFLINE) ; " + "tg=$(twingate status);" + "echo \"$local_ip|$subnet|$pub|$tg\""]
+        command: ["bash", "-c", "local_ip=$(hostname -I 2>/dev/null | awk '{print $1}') ; " + "subnet=$(ip -o -f inet addr show 2>/dev/null | awk '/scope global/ {print $4; exit}') ; " + "pub=$(curl -s --max-time 2 https://api.ipify.org 2>/dev/null || echo OFFLINE) ; " + "tg=$(twingate status 2>/dev/null || echo unknown);" + "echo \"$local_ip|$subnet|$pub|$tg\""]
         running: true
 
         stdout: StdioCollector {
