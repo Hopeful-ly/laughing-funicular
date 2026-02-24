@@ -50,7 +50,7 @@ PanelWindow {
     property string subnet: "0.0.0.0/0"
     property string publicIp: "UNKNOWN"
     property bool online: false
-    property string twingateConnected: "..."
+    property string tailscaleConnected: "..."
 
     // --- WORKSPACE STATE (Hyprland native) --------------------------------
     // If Hyprland.focusedWorkspace is an object with .id this works as-is.
@@ -765,9 +765,9 @@ PanelWindow {
                         spacing: -2
 
                         Text {
-                            id: twingateStatus
-                            text: "TwinGate"
-                            color: root.twingateConnected == "online" ? root.accentColor : root.dangerColor
+                            id: tailscaleStatus
+                            text: "Tailscale"
+                            color: root.tailscaleConnected.toLowerCase() === "running" ? root.accentColor : root.dangerColor
                             font.pixelSize: 11
                             font.bold: true
                             font.family: root.panelFont
@@ -776,8 +776,8 @@ PanelWindow {
                         }
 
                         Text {
-                            id: twingateText
-                            text: root.twingateConnected
+                            id: tailscaleText
+                            text: root.tailscaleConnected
                             color: root.textDim
                             font.pixelSize: 10
                             font.family: root.panelFont
@@ -901,7 +901,7 @@ PanelWindow {
     // ================== NETWORK INFO + ONLINE STATE =======================
     Process {
         id: netProc
-        command: ["bash", "-c", "local_ip=$(hostname -I 2>/dev/null | awk '{print $1}') ; " + "subnet=$(ip -o -f inet addr show 2>/dev/null | awk '/scope global/ {print $4; exit}') ; " + "pub=$(curl -s --max-time 2 https://api.ipify.org 2>/dev/null || echo OFFLINE) ; " + "tg=$(twingate status 2>/dev/null || echo unknown);" + "echo \"$local_ip|$subnet|$pub|$tg\""]
+        command: ["bash", "-c", "local_ip=$(hostname -I 2>/dev/null | awk '{print $1}') ; " + "subnet=$(ip -o -f inet addr show 2>/dev/null | awk '/scope global/ {print $4; exit}') ; " + "pub=$(curl -s --max-time 2 https://api.ipify.org 2>/dev/null || echo OFFLINE) ; " + "ts=$(tailscale status --json 2>/dev/null | jq -r '.BackendState // \"unknown\"' 2>/dev/null || echo unknown);" + "echo \"$local_ip|$subnet|$pub|$ts\""]
         running: true
 
         stdout: StdioCollector {
@@ -912,7 +912,7 @@ PanelWindow {
                     root.localIp = parts[0] || "0.0.0.0";
                     root.subnet = parts[1] || "0.0.0.0/0";
                     root.publicIp = parts[2] || "UNKNOWN";
-                    root.twingateConnected = parts[3];
+                    root.tailscaleConnected = parts[3] || "unknown";
                 }
 
                 root.online = (root.publicIp !== "OFFLINE" && root.publicIp !== "" && root.publicIp !== "UNKNOWN");
@@ -922,7 +922,7 @@ PanelWindow {
 
     Timer {
         // Check every 2 seconds when not online, otherwise every 2 minutes
-        interval: root.twingateConnected === "online" ? 2 * 60 * 1000 : 2 * 1000
+        interval: root.tailscaleConnected.toLowerCase() === "running" ? 2 * 60 * 1000 : 2 * 1000
         running: true
         repeat: true
         onTriggered: netProc.running = true
