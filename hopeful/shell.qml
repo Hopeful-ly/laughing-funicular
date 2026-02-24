@@ -98,20 +98,20 @@ PanelWindow {
         return -1;
     }
 
-    // --- WORKSPACE DATA MODEL (NERV/Evangelion themed) ----------------------
+    // --- WORKSPACE DATA MODEL (Allomantic metals) ----------------------------
     ListModel {
         id: planetModel
 
-        ListElement { name: "EVA-01";   symbol: "初"; color: "#9B59FF"; accent: "#7B3FDF"; glow: 0.35 }
-        ListElement { name: "EVA-02";   symbol: "弐"; color: "#FF3333"; accent: "#FF5544"; glow: 0.30 }
-        ListElement { name: "EVA-00";   symbol: "零"; color: "#55AAFF"; accent: "#3388DD"; glow: 0.25 }
-        ListElement { name: "MELCHIOR"; symbol: "M1"; color: "#00FFAA"; accent: "#00CC88"; glow: 0.28 }
-        ListElement { name: "BALTHASAR";symbol: "M2"; color: "#FFCC00"; accent: "#DDAA00"; glow: 0.25 }
-        ListElement { name: "CASPER";   symbol: "M3"; color: "#FF6699"; accent: "#DD4477"; glow: 0.25 }
-        ListElement { name: "LILITH";   symbol: "月"; color: "#C8C6FF"; accent: "#9FA5E0"; glow: 0.20 }
-        ListElement { name: "ADAM";     symbol: "光"; color: "#FFD700"; accent: "#FFA500"; glow: 0.32 }
-        ListElement { name: "SEELE";    symbol: "目"; color: "#FF5533"; accent: "#CC3311"; glow: 0.18 }
-        ListElement { name: "TERMINAL"; symbol: "終"; color: "#E0F0F0"; accent: "#AACCCC"; glow: 0.15 }
+        ListElement { name: "Steel";      symbol: "ST"; color: "#B0C4DE"; accent: "#8AA8C8"; glow: 0.25 }
+        ListElement { name: "Iron";       symbol: "FE"; color: "#8B8B8B"; accent: "#6A6A6A"; glow: 0.18 }
+        ListElement { name: "Pewter";     symbol: "PW"; color: "#A9A9A9"; accent: "#888888"; glow: 0.20 }
+        ListElement { name: "Tin";        symbol: "TN"; color: "#E8E8E8"; accent: "#C0C0C0"; glow: 0.15 }
+        ListElement { name: "Copper";     symbol: "CU"; color: "#CD7F32"; accent: "#B87333"; glow: 0.22 }
+        ListElement { name: "Bronze";     symbol: "BZ"; color: "#C9956B"; accent: "#A67B5B"; glow: 0.20 }
+        ListElement { name: "Zinc";       symbol: "ZN"; color: "#55AAFF"; accent: "#3388DD"; glow: 0.28 }
+        ListElement { name: "Brass";      symbol: "BR"; color: "#FFD700"; accent: "#DAA520"; glow: 0.25 }
+        ListElement { name: "Gold";       symbol: "AU"; color: "#FFB800"; accent: "#E5A600"; glow: 0.35 }
+        ListElement { name: "Atium";      symbol: "AT"; color: "#C8A2FF"; accent: "#A77BDB"; glow: 0.40 }
     }
 
     // --- Reusable Components -----------------------------------------------
@@ -296,15 +296,16 @@ PanelWindow {
                         }
                     }
 
-                    // Planet symbol
+                    // Metal symbol
                     Text {
                         id: planetSymbol
                         text: model.symbol
                         anchors.centerIn: parent
                         anchors.verticalCenterOffset: -2
-                        font.pixelSize: 20
-                        font.bold: wsDelegate.isActive
+                        font.pixelSize: 13
+                        font.bold: true
                         font.family: root.panelFont
+                        font.letterSpacing: 1
                         color: wsDelegate.isActive ? model.color : (wsDelegate.isHovered ? root.accentSoft : root.textDim)
                         opacity: wsDelegate.isActive ? 1.0 : 0.7
                         scale: wsDelegate.isActive ? 1.1 : (wsDelegate.isHovered ? 1.05 : 1.0)
