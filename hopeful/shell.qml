@@ -98,20 +98,20 @@ PanelWindow {
         return -1;
     }
 
-    // --- PLANET/WORKSPACE DATA MODEL ---------------------------------------
+    // --- WORKSPACE DATA MODEL (NERV/Evangelion themed) ----------------------
     ListModel {
         id: planetModel
 
-        ListElement { name: "Mercury"; symbol: "☿"; color: "#C0C0C8"; accent: "#6FB1FF"; glow: 0.15 }
-        ListElement { name: "Venus";   symbol: "♀"; color: "#FFCC7A"; accent: "#FF9E3D"; glow: 0.25 }
-        ListElement { name: "Earth";   symbol: "⊕"; color: "#66CFFF"; accent: "#00E5A8"; glow: 0.35 }
-        ListElement { name: "Mars";    symbol: "♂"; color: "#FF5533"; accent: "#FF7A4A"; glow: 0.22 }
-        ListElement { name: "Jupiter"; symbol: "♃"; color: "#EDE2C8"; accent: "#D9A75C"; glow: 0.18 }
-        ListElement { name: "Saturn";  symbol: "♄"; color: "#D7C48A"; accent: "#E8D07A"; glow: 0.20 }
-        ListElement { name: "Uranus";  symbol: "♅"; color: "#B3F4FF"; accent: "#7EE8F0"; glow: 0.28 }
-        ListElement { name: "Neptune"; symbol: "♆"; color: "#6A8BFF"; accent: "#4F6CFF"; glow: 0.30 }
-        ListElement { name: "Pluto";   symbol: "♇"; color: "#C8C6C0"; accent: "#9FA5B0"; glow: 0.12 }
-        ListElement { name: "Sol";     symbol: "☉"; color: "#FFD700"; accent: "#FFA500"; glow: 0.40 }
+        ListElement { name: "EVA-01";   symbol: "初"; color: "#9B59FF"; accent: "#7B3FDF"; glow: 0.35 }
+        ListElement { name: "EVA-02";   symbol: "弐"; color: "#FF3333"; accent: "#FF5544"; glow: 0.30 }
+        ListElement { name: "EVA-00";   symbol: "零"; color: "#55AAFF"; accent: "#3388DD"; glow: 0.25 }
+        ListElement { name: "MELCHIOR"; symbol: "M1"; color: "#00FFAA"; accent: "#00CC88"; glow: 0.28 }
+        ListElement { name: "BALTHASAR";symbol: "M2"; color: "#FFCC00"; accent: "#DDAA00"; glow: 0.25 }
+        ListElement { name: "CASPER";   symbol: "M3"; color: "#FF6699"; accent: "#DD4477"; glow: 0.25 }
+        ListElement { name: "LILITH";   symbol: "月"; color: "#C8C6FF"; accent: "#9FA5E0"; glow: 0.20 }
+        ListElement { name: "ADAM";     symbol: "光"; color: "#FFD700"; accent: "#FFA500"; glow: 0.32 }
+        ListElement { name: "SEELE";    symbol: "目"; color: "#FF5533"; accent: "#CC3311"; glow: 0.18 }
+        ListElement { name: "TERMINAL"; symbol: "終"; color: "#E0F0F0"; accent: "#AACCCC"; glow: 0.15 }
     }
 
     // --- Reusable Components -----------------------------------------------
