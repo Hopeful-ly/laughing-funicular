@@ -91,9 +91,6 @@ PanelWindow {
     property bool online: false
     property string tailscaleConnected: "..."
     property var audioSink: Pipewire.defaultAudioSink
-    property var audioNode: audioSink ? audioSink.audio : null
-    property int volumePercent: audioNode ? Math.round(audioNode.volume * 100) : 0
-    property bool volumeMuted: audioNode ? audioNode.muted : false
 
     PwObjectTracker {
         objects: [root.audioSink]
@@ -684,7 +681,7 @@ PanelWindow {
                 implicitHeight: 30
                 implicitWidth: volumePill.implicitWidth
 
-                property color volumeColor: root.volumeMuted ? root.dangerColor : root.accentSoft
+                property color volumeColor: root.audioSink && root.audioSink.audio && root.audioSink.audio.muted ? root.dangerColor : root.accentSoft
 
                 Rectangle {
                     id: volumePill
@@ -707,14 +704,14 @@ PanelWindow {
 
                         Text {
                             id: volumeIcon
-                            text: root.volumeMuted ? "VOL" : "VOL"
+                            text: "VOL"
                             color: volumeRoot.volumeColor
                             font.pixelSize: 10
                             font.family: root.panelFont
                         }
 
                         Text {
-                            text: root.volumeMuted ? "MUTE" : root.volumePercent + "%"
+                            text: root.audioSink && root.audioSink.audio && root.audioSink.audio.muted ? "MUTE" : Math.round((root.audioSink && root.audioSink.audio ? root.audioSink.audio.volume : 0) * 100) + "%"
                             color: volumeRoot.volumeColor
                             font.pixelSize: 11
                             font.bold: true
@@ -730,21 +727,22 @@ PanelWindow {
                     cursorShape: Qt.PointingHandCursor
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                     onClicked: function(mouse) {
-                        if (root.audioNode)
-                            root.audioNode.muted = !root.audioNode.muted;
+                        const audio = root.audioSink ? root.audioSink.audio : null;
+                        if (audio) audio.muted = !audio.muted;
                     }
                 }
 
                 WheelHandler {
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                     onWheel: function(wheel) {
-                        if (!root.audioNode) return;
+                        const audio = root.audioSink ? root.audioSink.audio : null;
+                        if (!audio) return;
                         const step = 0.05;
                         const delta = wheel.angleDelta.y;
                         if (delta > 0)
-                            root.audioNode.volume = Math.min(1.0, root.audioNode.volume + step);
+                            audio.volume = Math.min(1.0, audio.volume + step);
                         else if (delta < 0)
-                            root.audioNode.volume = Math.max(0.0, root.audioNode.volume - step);
+                            audio.volume = Math.max(0.0, audio.volume - step);
                     }
                 }
             }
