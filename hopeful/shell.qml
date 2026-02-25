@@ -4,6 +4,7 @@ import Quickshell.Io                 // Process, StdioCollector
 import Quickshell.Hyprland           // Hyprland singleton
 import Quickshell.Services.SystemTray
 import Quickshell.Services.UPower    // Battery info via UPower
+import Quickshell.Services.Pipewire  // PipeWire audio
 import Quickshell.Widgets            // IconImage
 import QtQuick
 import QtQuick.Layouts
@@ -89,6 +90,14 @@ PanelWindow {
     property string publicIp: "UNKNOWN"
     property bool online: false
     property string tailscaleConnected: "..."
+    property var audioSink: Pipewire.defaultAudioSink
+    property var audioNode: audioSink ? audioSink.audio : null
+    property int volumePercent: audioNode ? Math.round(audioNode.volume * 100) : 0
+    property bool volumeMuted: audioNode ? audioNode.muted : false
+
+    PwObjectTracker {
+        objects: [root.audioSink]
+    }
 
     // --- WORKSPACE STATE ---------------------------------------------------
     property int currentWorkspaceIndex: {
@@ -668,6 +677,81 @@ PanelWindow {
             // Separator
             Item { width: 1; height: 20; Loader { sourceComponent: separator } }
 
+            // ---- Volume Indicator ------------------------------------------------
+            Item {
+                id: volumeRoot
+                Layout.alignment: Qt.AlignVCenter
+                implicitHeight: 30
+                implicitWidth: volumePill.implicitWidth
+
+                property color volumeColor: root.volumeMuted ? root.dangerColor : root.accentSoft
+
+                Rectangle {
+                    id: volumePill
+                    anchors.centerIn: parent
+                    implicitWidth: volumeRow.implicitWidth + 14
+                    implicitHeight: 26
+                    radius: 6
+                    color: volumeMouse.containsMouse ? root.surfaceHover : Qt.rgba(volumeRoot.volumeColor.r, volumeRoot.volumeColor.g, volumeRoot.volumeColor.b, 0.08)
+                    border.width: 1
+                    border.color: volumeMouse.containsMouse ? volumeRoot.volumeColor : root.borderColor
+                    antialiasing: true
+
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                    RowLayout {
+                        id: volumeRow
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        Text {
+                            id: volumeIcon
+                            text: root.volumeMuted ? "VOL" : "VOL"
+                            color: volumeRoot.volumeColor
+                            font.pixelSize: 10
+                            font.family: root.panelFont
+                        }
+
+                        Text {
+                            text: root.volumeMuted ? "MUTE" : root.volumePercent + "%"
+                            color: volumeRoot.volumeColor
+                            font.pixelSize: 11
+                            font.bold: true
+                            font.family: root.panelFont
+                        }
+                    }
+                }
+
+                MouseArea {
+                    id: volumeMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                    onClicked: function(mouse) {
+                        if (root.audioNode)
+                            root.audioNode.muted = !root.audioNode.muted;
+                    }
+                }
+
+                WheelHandler {
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    onWheel: function(wheel) {
+                        if (!root.audioNode) return;
+                        const step = 0.05;
+                        const delta = wheel.angleDelta.y;
+                        if (delta > 0)
+                            root.audioNode.volume = Math.min(1.0, root.audioNode.volume + step);
+                        else if (delta < 0)
+                            root.audioNode.volume = Math.max(0.0, root.audioNode.volume - step);
+                    }
+                }
+            }
+
+            // Separator
+            Item { width: 1; height: 20; Loader { sourceComponent: separator } }
+
             // ---- Battery Indicator (clickable for popup) --------------------
             Item {
                 id: batteryRoot
@@ -1190,4 +1274,5 @@ PanelWindow {
         repeat: true
         onTriggered: netProc.running = true
     }
+
 }
