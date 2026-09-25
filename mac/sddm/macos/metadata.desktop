@@ -1,0 +1,12 @@
+[SddmGreeterTheme]
+Name=macos
+Description=macOS Tahoe-style login screen matching the Quickshell "mac" shell
+Author=hopeful
+License=MIT
+Type=sddm-theme
+Version=1.0
+MainScript=Main.qml
+ConfigFile=theme.conf
+Theme-Id=macos
+Theme-API=2.0
+QtVersion=6

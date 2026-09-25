@@ -12,10 +12,11 @@ import QtQml                         // ListModel, ListElement
 import QtQuick.Effects               // MultiEffect (modern glow)
 
 /*
- * NERV Celestial Monitoring System - Panel UI v3.0
+ * Lunar Monitoring System - Panel UI v3.1
  *
- * Overhaul: refined visuals, PopupWindow-based popups for
- * network diagnostics, clock/calendar, and battery details.
+ * Warm "Mitra" theme (amber / gold on dark ember-brown).
+ * PopupWindow-based popups for network diagnostics, clock/calendar,
+ * CPU load, and battery details.
  */
 
 PanelWindow {
@@ -29,30 +30,32 @@ PanelWindow {
     implicitHeight: 44
     color: "transparent"
 
-    // --- NERV / MAGI STYLE THEME -------------------------------------------
-    property color colorBackground: "#0c1220"
-    property color colorBackgroundEnd: "#0a101f"
-    property color accentColor: "#00ffaa"
-    property color accentSoft: "#008f7a"
-    property color warningColor: "#ff9900"
-    property color dangerColor: "#ff3355"
-    property color infoColor: "#55aaff"
-    property color textDim: "#4a7a7a"
-    property color textPrimary: "#e0f0f0"
-    property color surfaceColor: "#0a1018"
-    property color surfaceHover: "#0f1a28"
-    property color borderColor: "#1a3040"
+    // --- LUNAR / MITRA WARM THEME ------------------------------------------
+    property color colorBackground: "#181009"     // warm ember top
+    property color colorBackgroundEnd: "#0f0a07"   // near-black warm brown
+    property color accentColor: "#f0a556"          // warm amber (primary)
+    property color accentSoft: "#c47a3a"           // muted rust-amber
+    property color warningColor: "#edb345"         // golden
+    property color dangerColor: "#ff6367"          // warm red
+    property color infoColor: "#d78a3f"            // amber
+    property color textDim: "#9a8d7e"              // warm muted
+    property color textPrimary: "#ece7df"          // warm cream
+    property color surfaceColor: "#18110d"         // card surface
+    property color surfaceHover: "#241c17"         // hover / muted
+    property color borderColor: "#2d241f"          // warm border
     property string panelFont: "monospace"
 
     // --- POPUP STATE -------------------------------------------------------
     property bool showNetPopup: false
     property bool showClockPopup: false
     property bool showBatteryPopup: false
+    property bool showCpuPopup: false
 
     function closeAllPopups() {
         showNetPopup = false;
         showClockPopup = false;
         showBatteryPopup = false;
+        showCpuPopup = false;
     }
 
     function togglePopup(which) {
@@ -80,6 +83,14 @@ PanelWindow {
                 batteryPopup.anchor.rect.x = pt.x + batteryRoot.width / 2 - 150;
                 showBatteryPopup = true;
             }
+        } else if (which === "cpu") {
+            const was = showCpuPopup;
+            closeAllPopups();
+            if (!was) {
+                const pt = cpuRoot.mapToItem(null, 0, 0);
+                cpuPopup.anchor.rect.x = pt.x + cpuRoot.width / 2 - 150;
+                showCpuPopup = true;
+            }
         }
     }
 
@@ -91,6 +102,12 @@ PanelWindow {
     property bool online: false
     property string tailscaleConnected: "..."
     property var audioSink: Pipewire.defaultAudioSink
+
+    // --- CPU STATE ---------------------------------------------------------
+    property int cpuUsage: 0
+    property string cpuLoad: "0.00 0.00 0.00"
+    property int cpuCores: 0
+    property var cpuTopProcs: []
 
     PwObjectTracker {
         objects: [root.audioSink]
@@ -198,7 +215,7 @@ PanelWindow {
                     radius: 4
                     border.color: root.accentSoft
                     border.width: 1
-                    color: "#060a12"
+                    color: "#100a06"
                     antialiasing: true
 
                     Canvas {
@@ -249,7 +266,7 @@ PanelWindow {
                 spacing: -1
 
                 Text {
-                    text: "NERV"
+                    text: "LUNAR"
                     color: root.accentColor
                     font.bold: true
                     font.pixelSize: 15
@@ -668,6 +685,67 @@ PanelWindow {
                         font.bold: true
                         font.family: root.panelFont
                     }
+                }
+            }
+
+            // Separator
+            Item { width: 1; height: 20; Loader { sourceComponent: separator } }
+
+            // ---- CPU Indicator (clickable for popup) -----------------------
+            Item {
+                id: cpuRoot
+                Layout.alignment: Qt.AlignVCenter
+                implicitHeight: 30
+                implicitWidth: cpuPill.implicitWidth
+
+                property color cpuColor: {
+                    if (root.cpuUsage >= 85) return root.dangerColor;
+                    if (root.cpuUsage >= 60) return root.warningColor;
+                    return root.accentSoft;
+                }
+
+                Rectangle {
+                    id: cpuPill
+                    anchors.centerIn: parent
+                    implicitWidth: cpuRow.implicitWidth + 14
+                    implicitHeight: 26
+                    radius: 6
+                    color: cpuMouse.containsMouse ? root.surfaceHover : Qt.rgba(cpuRoot.cpuColor.r, cpuRoot.cpuColor.g, cpuRoot.cpuColor.b, 0.08)
+                    border.width: 1
+                    border.color: cpuMouse.containsMouse ? cpuRoot.cpuColor : root.borderColor
+                    antialiasing: true
+
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                    RowLayout {
+                        id: cpuRow
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        Text {
+                            text: "CPU"
+                            color: cpuRoot.cpuColor
+                            font.pixelSize: 10
+                            font.family: root.panelFont
+                        }
+
+                        Text {
+                            text: root.cpuUsage + "%"
+                            color: cpuRoot.cpuColor
+                            font.pixelSize: 11
+                            font.bold: true
+                            font.family: root.panelFont
+                        }
+                    }
+                }
+
+                MouseArea {
+                    id: cpuMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.togglePopup("cpu")
                 }
             }
 
@@ -1124,6 +1202,129 @@ PanelWindow {
         }
     }
 
+    // ---- CPU Popup --------------------------------------------------------
+    PopupWindow {
+        id: cpuPopup
+        anchor.window: root
+        anchor.rect.x: 0
+        anchor.rect.y: root.implicitHeight
+        visible: root.showCpuPopup
+        width: 300
+        height: cpuPopupContent.implicitHeight + 2
+        color: "transparent"
+
+        Rectangle {
+            id: cpuPopupContent
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: 6
+            color: root.surfaceColor
+            border.width: 1
+            border.color: root.accentSoft
+            implicitHeight: cpuPopupCol.implicitHeight + 24
+
+            opacity: root.showCpuPopup ? 1.0 : 0.0
+            transform: Translate { y: root.showCpuPopup ? 0 : -4 }
+            Behavior on opacity { NumberAnimation { duration: 200 } }
+
+            ColumnLayout {
+                id: cpuPopupCol
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 8
+
+                Text {
+                    text: "PROCESSOR LOAD"
+                    color: root.warningColor
+                    font.pixelSize: 11
+                    font.bold: true
+                    font.family: root.panelFont
+                    font.letterSpacing: 1
+                }
+
+                Rectangle { height: 1; color: root.borderColor; Layout.fillWidth: true }
+
+                // Large usage percentage
+                Text {
+                    text: root.cpuUsage + "%"
+                    color: cpuRoot.cpuColor
+                    font.pixelSize: 28
+                    font.bold: true
+                    font.family: root.panelFont
+                    Layout.alignment: Qt.AlignHCenter
+                }
+
+                // Usage bar
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 6
+                    radius: 3
+                    color: root.surfaceHover
+
+                    Rectangle {
+                        width: parent.width * Math.max(0, Math.min(100, root.cpuUsage)) / 100
+                        height: parent.height
+                        radius: 3
+                        color: cpuRoot.cpuColor
+                        Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                    }
+                }
+
+                Rectangle { height: 1; color: root.borderColor; Layout.fillWidth: true }
+
+                GridLayout {
+                    columns: 2
+                    columnSpacing: 16
+                    rowSpacing: 4
+                    Layout.fillWidth: true
+
+                    Text { text: "LOAD AVG:"; color: root.textDim; font.pixelSize: 10; font.family: root.panelFont }
+                    Text { text: root.cpuLoad; color: root.textPrimary; font.pixelSize: 10; font.family: root.panelFont }
+
+                    Text { text: "CORES:"; color: root.textDim; font.pixelSize: 10; font.family: root.panelFont }
+                    Text { text: root.cpuCores > 0 ? root.cpuCores.toString() : "N/A"; color: root.textPrimary; font.pixelSize: 10; font.family: root.panelFont }
+                }
+
+                Rectangle { height: 1; color: root.borderColor; Layout.fillWidth: true }
+
+                Text {
+                    text: "TOP PROCESSES"
+                    color: root.warningColor
+                    font.pixelSize: 10
+                    font.bold: true
+                    font.family: root.panelFont
+                    font.letterSpacing: 1
+                }
+
+                Repeater {
+                    model: root.cpuTopProcs
+
+                    delegate: RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Text {
+                            text: modelData.name
+                            color: root.textPrimary
+                            font.pixelSize: 10
+                            font.family: root.panelFont
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
+
+                        Text {
+                            text: modelData.cpu + "%"
+                            color: root.accentColor
+                            font.pixelSize: 10
+                            font.bold: true
+                            font.family: root.panelFont
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // ---- Network Diagnostics Popup ----------------------------------------
     PopupWindow {
         id: netPopupWindow
@@ -1271,6 +1472,49 @@ PanelWindow {
         running: true
         repeat: true
         onTriggered: netProc.running = true
+    }
+
+    // ================== CPU LOAD (via /proc/stat) =========================
+    Process {
+        id: cpuProc
+        command: ["bash", "-c",
+            "r(){ read _ u n s i w x y z rest < /proc/stat; idle=$((i+w)); total=$((u+n+s+i+w+x+y+z)); } ; " +
+            "r; pt=$total; pi=$idle ; sleep 0.4 ; r; dt=$((total-pt)); di=$((idle-pi)) ; " +
+            "usage=0; [ \"$dt\" -gt 0 ] && usage=$(( (100*(dt-di))/dt )) ; " +
+            "load=$(cut -d' ' -f1-3 /proc/loadavg) ; " +
+            "cores=$(nproc 2>/dev/null || echo 0) ; " +
+            "top=$(ps -eo comm,%cpu --sort=-%cpu --no-headers 2>/dev/null | head -3 | awk '{printf \"%s:%s~\", $1, $2}') ; " +
+            "echo \"$usage|$load|$cores|$top\""]
+        running: true
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const parts = text.trim().split("|");
+                if (parts.length >= 4) {
+                    root.cpuUsage = parseInt(parts[0]) || 0;
+                    root.cpuLoad = parts[1] || "0.00 0.00 0.00";
+                    root.cpuCores = parseInt(parts[2]) || 0;
+
+                    const procs = [];
+                    const rawProcs = parts[3].split("~");
+                    for (let k = 0; k < rawProcs.length; k++) {
+                        const p = rawProcs[k].trim();
+                        if (p.length === 0) continue;
+                        const idx = p.lastIndexOf(":");
+                        if (idx < 0) continue;
+                        procs.push({ name: p.substring(0, idx), cpu: p.substring(idx + 1) });
+                    }
+                    root.cpuTopProcs = procs;
+                }
+            }
+        }
+    }
+
+    Timer {
+        interval: 2000
+        running: true
+        repeat: true
+        onTriggered: cpuProc.running = true
     }
 
 }
