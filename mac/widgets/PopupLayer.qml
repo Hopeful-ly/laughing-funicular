@@ -33,24 +33,37 @@ PanelWindow {
 
     readonly property bool shown: open || t > 0.002
     visible: persistent || shown
+    // A closed persistent popup shrinks to a single pixel: no full-screen
+    // buffers to composite or blur, and its content stops rendering.
+    anchors { top: true; left: true; bottom: pl.shown; right: pl.shown }
+    implicitWidth: 1
+    implicitHeight: 1
     mask: !shown ? emptyRegion : panelItem ? panelRegion : null
     Region { id: emptyRegion }
     Region { id: panelRegion; item: pl.panelItem }
 
+    // Start the grab only once the surface has grown from its 1x1 idle size,
+    // otherwise the compositor hands the keyboard to the bar instead.
+    readonly property bool sized: width > 1 && height > 1
+    // Only the popup itself is whitelisted: any surface in the list can end up
+    // with the keyboard when the pointer crosses it (the dock did exactly that).
+    // Clicking the bar or dock therefore closes the popup first; Shell.toggle
+    // ignores a re-open of the same panel within a moment of that.
     HyprlandFocusGrab {
-        active: pl.open && pl.panelItem !== null
-        windows: [pl, Shell.bars[pl.grabScreen], Shell.docks[pl.grabScreen]].filter(w => !!w)
-        onCleared: if (pl.open) pl.dismissed()
+        active: pl.open && pl.panelItem !== null && pl.sized
+        windows: [pl]
+        onCleared: if (pl.open) { Shell.noteDismiss(); pl.dismissed(); }
     }
     color: "transparent"
     exclusionMode: ExclusionMode.Normal
     exclusiveZone: 0
-    anchors { top: true; bottom: true; left: true; right: true }
     WlrLayershell.namespace: ns
     WlrLayershell.layer: WlrLayer.Overlay
-    // Exclusive only for modal overlays; grabbed popups use OnDemand so the
-    // bar still gets clicks (the focus grab hands the keyboard to the popup).
-    WlrLayershell.keyboardFocus: !(open && keyboard) ? WlrKeyboardFocus.None : panelItem ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive
+    // Exclusive while open: Hyprland then keeps the keyboard on this surface
+    // itself (with OnDemand it only did so once the pointer entered it). The
+    // bar stays clickable because pointer input is not affected, and the
+    // focus grab below handles click-outside-to-close.
+    WlrLayershell.keyboardFocus: open && keyboard ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
     MouseArea {
         anchors.fill: parent
@@ -61,6 +74,7 @@ PanelWindow {
     Item {
         id: container
         anchors.fill: parent
+        visible: pl.shown
         focus: true
         Keys.onEscapePressed: pl.dismissed()
     }

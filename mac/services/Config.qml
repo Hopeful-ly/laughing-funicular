@@ -28,6 +28,12 @@ Singleton {
     property alias barGlass: adapter.barGlass           // false = transparent like Tahoe
     property alias clock24h: adapter.clock24h
     property alias keepAwake: adapter.keepAwake
+    // Deep Focus (services/Focus.qml). Persisted so a shell reload can't end it.
+    property alias focus: adapter.focus
+    property alias focusMinutes: adapter.focusMinutes          // last chosen duration, 0 = open-ended
+    property alias focusExitHold: adapter.focusExitHold        // seconds to hold before leaving
+    property alias focusExitPhrase: adapter.focusExitPhrase    // must be typed exactly
+    property alias focusExitCountdown: adapter.focusExitCountdown
 
     FileView {
         id: file
@@ -48,6 +54,11 @@ Singleton {
             property bool barGlass: false
             property bool clock24h: true
             property bool keepAwake: false
+            property var focus: ({ active: false })
+            property int focusMinutes: 50
+            property int focusExitHold: 3
+            property string focusExitPhrase: "I am choosing to leave deep focus"
+            property int focusExitCountdown: 20
         }
     }
 

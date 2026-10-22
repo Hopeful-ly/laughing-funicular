@@ -20,6 +20,10 @@ PanelWindow {
         next.source = "file://" + path;
     }
     Component.onCompleted: apply(Wallpaper.current)
+    // Once the cross-fade is over, drop the hidden image so only one decoded
+    // wallpaper per screen stays in memory.
+    onFlipChanged: freeTimer.restart()
+    Timer { id: freeTimer; interval: 900; onTriggered: { if (w.flip) a.source = ""; else b.source = ""; } }
     Connections { target: Wallpaper; function onCurrentChanged() { w.apply(Wallpaper.current); } }
 
     Image {

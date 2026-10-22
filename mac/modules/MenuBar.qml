@@ -14,6 +14,7 @@ import qs.widgets
 PanelWindow {
     id: bar
     anchors { top: true; left: true; right: true }
+    visible: !Focus.active
     implicitHeight: Config.barHeight
     color: "transparent"
     WlrLayershell.namespace: Config.barGlass ? "mac-bar-glass" : "mac-bar"
@@ -191,6 +192,7 @@ PanelWindow {
                     { text: "Keep in Dock", icon: "keep", checked: entry && Config.isPinned(entry.id), enabled: !!entry, action: () => Config.togglePin(entry.id) },
                     { separator: true },
                     { text: "Close Window", icon: "close", shortcut: "Super Q", action: () => Shell.dispatch(`hl.dsp.window.close({ window = "address:${addr}" })`) },
+                    { text: "Deep Focus on " + Apps.nameForAppId(bar.activeAppId), icon: "center_focus_strong", shortcut: "Super ⇧ D", action: () => Focus.start(entry, bar.activeAppId, Config.focusMinutes) },
                     { text: "Quit " + Apps.nameForAppId(bar.activeAppId), icon: "cancel", destructive: true, action: () => Windows.quitApp(bar.activeAppId) }
                 ]);
             }

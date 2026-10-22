@@ -23,6 +23,7 @@ Scope {
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "mac-lock-preview"
         WlrLayershell.keyboardFocus: Lock.previewing ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-        LockContent { anchors.fill: parent; preview: true }
+        // Only built while previewing: the blurred wallpaper is expensive to keep around.
+        Loader { anchors.fill: parent; active: Lock.previewing; sourceComponent: LockContent { preview: true } }
     }
 }

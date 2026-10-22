@@ -17,10 +17,6 @@ Singleton {
     property string lastError: ""
     property var known: []
 
-    // Tailscale
-    property string tsState: ""
-    readonly property bool tsUp: tsState === "Running"
-
     function refresh() { statusProc.running = true; }
     function scan() { scanning = true; listProc.command = ["bash", "-c", "nmcli -t -f ACTIVE,SIGNAL,SECURITY,SSID dev wifi list --rescan yes"]; listProc.running = true; }
     function setWifi(on) { wifiEnabled = on; Quickshell.execDetached(["nmcli", "radio", "wifi", on ? "on" : "off"]); }
@@ -32,7 +28,6 @@ Singleton {
         connectProc.running = true;
     }
     function disconnect() { Quickshell.execDetached(["bash", "-c", "nmcli con down id \"$(nmcli -t -f NAME,TYPE con show --active | grep wireless | head -1 | cut -d: -f1)\""]); }
-    function toggleTailscale() { tsProc.command = ["bash", "-c", root.tsUp ? "tailscale down" : "tailscale up"]; tsProc.running = true; }
 
     function icon() {
         if (wired && ssid === "") return "lan";
@@ -45,7 +40,7 @@ Singleton {
 
     Process {
         id: statusProc
-        command: ["bash", "-c", "nmcli -t radio wifi; echo ---; nmcli -t -f TYPE,STATE dev; echo ---; nmcli -t -f ACTIVE,SIGNAL,SSID dev wifi list --rescan no | grep '^yes' | head -1; echo ---; nmcli -t -f NAME,TYPE con show | grep wireless | cut -d: -f1; echo ---; tailscale status --json 2>/dev/null | jq -r .BackendState 2>/dev/null"]
+        command: ["bash", "-c", "nmcli -t radio wifi; echo ---; nmcli -t -f TYPE,STATE dev; echo ---; nmcli -t -f ACTIVE,SIGNAL,SSID dev wifi list --rescan no | grep '^yes' | head -1; echo ---; nmcli -t -f NAME,TYPE con show | grep wireless | cut -d: -f1"]
         stdout: StdioCollector {
             onStreamFinished: {
                 const parts = text.split("---\n");
@@ -58,7 +53,6 @@ Singleton {
                     root.ssid = f.slice(2).join(":");
                 } else { root.ssid = ""; root.signal = 0; }
                 root.known = (parts[3] || "").split("\n").filter(s => s);
-                root.tsState = (parts[4] || "").trim();
             }
         }
     }
@@ -88,7 +82,6 @@ Singleton {
         stderr: StdioCollector { onStreamFinished: if (text.trim()) root.lastError = text.trim() }
         onExited: code => { root.connecting = ""; if (code !== 0 && !root.lastError) root.lastError = "Could not connect"; root.refresh(); }
     }
-    Process { id: tsProc; onExited: root.refresh() }
 
     // React to NetworkManager changes, debounced.
     Process {

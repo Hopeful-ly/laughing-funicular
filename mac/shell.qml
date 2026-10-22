@@ -28,6 +28,8 @@ ShellRoot {
                 Clipboard { screen: perScreen.modelData }
                 ContextMenu { screen: perScreen.modelData }
                 Dialog { screen: perScreen.modelData }
+                FocusPill { screen: perScreen.modelData }
+                FocusExit { screen: perScreen.modelData }
             }
         }
     }
@@ -39,5 +41,6 @@ ShellRoot {
         Theme.init();
         Notifs.init();
         Idle.init();
+        Focus.init();
     }
 }

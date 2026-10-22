@@ -30,7 +30,7 @@ Singleton {
         onNotification: n => {
             n.tracked = true;
             const t = Object.assign({}, root.times); t[n.id] = Date.now(); root.times = t;
-            if (!Config.dnd || n.urgency === NotificationUrgency.Critical) {
+            if ((!Config.dnd && !Focus.active) || n.urgency === NotificationUrgency.Critical) {
                 root.popups = [n].concat(root.popups).slice(0, 5);
             }
             n.closed.connect(() => root.removePopup(n));

@@ -32,8 +32,21 @@ PopupLayer {
         root: { title: "Search", icon: "search", color: "#8e8e93", ph: "Search for apps and commands…" },
         windows: { title: "Windows", icon: "select_window", color: "#0a84ff", ph: "Search open windows…" },
         wallpapers: { title: "Wallpapers", icon: "wallpaper", color: "#5e5ce6", ph: "Filter wallpapers…" },
-        shortcuts: { title: "Shortcuts", icon: "keyboard", color: "#8e8e93", ph: "Search keyboard shortcuts…" }
+        shortcuts: { title: "Shortcuts", icon: "keyboard", color: "#8e8e93", ph: "Search keyboard shortcuts…" },
+        focus: { title: "Deep Focus", icon: "center_focus_strong", color: "#ff375f", ph: "Choose the one app to lock in on…" }
     })
+    readonly property var focusDurations: [
+        { m: 25, label: "25 minutes" }, { m: 50, label: "50 minutes" }, { m: 90, label: "90 minutes" }, { m: 120, label: "2 hours" }, { m: 0, label: "Until I stop" }
+    ]
+    function durationLabel(m) { const d = focusDurations.find(x => x.m === m); return d ? d.label : m + " minutes"; }
+    function focusItem(entry, appId, section) {
+        const name = entry ? entry.name : Apps.nameForAppId(appId);
+        const go = (m) => { Config.focusMinutes = m; lnc.done(); Shell.later(() => Focus.start(entry, appId, m)); };
+        const acts = [{ title: "Start · " + durationLabel(Config.focusMinutes), icon: "center_focus_strong", keys: ["↵"], fn: () => go(Config.focusMinutes) }];
+        focusDurations.forEach((d, i) => acts.push({ title: d.label, icon: d.m ? "timer" : "all_inclusive", keys: ["Ctrl", String(i + 1)], hot: "ctrl+" + (i + 1), fn: () => go(d.m) }));
+        return { section: section, title: name, sub: entry ? (entry.genericName || entry.comment || "") : "", path: entry ? Apps.icon(entry) : Apps.iconForAppId(appId),
+                 accessory: appId ? "Running" : "", actions: acts };
+    }
 
     function reset() {
         view = Shell.launcherView === "calculator" ? "root" : Shell.launcherView;
@@ -98,6 +111,7 @@ PopupLayer {
         }
         acts.push({ title: pinned ? "Remove from Dock" : "Keep in Dock", icon: "keep", keys: ["Ctrl", "P"], hot: "ctrl+p", fn: () => { Config.togglePin(a.id); lnc.flash(pinned ? "Removed from Dock" : "Added to Dock"); } });
         if (running) acts.push({ title: "Quit " + a.name, icon: "cancel", keys: ["Ctrl", "Q"], hot: "ctrl+q", destructive: true, fn: () => { Windows.quitApp(a.startupClass || a.id); Windows.quitApp(a.id); lnc.flash("Quit " + a.name); } });
+        acts.push({ title: "Deep Focus on " + a.name, icon: "center_focus_strong", keys: ["Ctrl", "F"], hot: "ctrl+f", fn: () => { lnc.done(); Shell.later(() => Focus.start(a, null, Config.focusMinutes)); } });
         acts.push({ title: "Copy Name", icon: "content_copy", keys: ["Ctrl", "⇧", "C"], hot: "ctrl+shift+c", fn: () => { Quickshell.clipboardText = a.name; lnc.flash("Copied"); } });
         acts.push({ title: "Reset Ranking", icon: "restart_alt", fn: () => { Apps.forget("app:" + a.id); lnc.flash("Ranking reset"); } });
         return acts;
@@ -165,6 +179,18 @@ PopupLayer {
             return out.map((x, i) => ({ x: x, i: i })).sort((a, b) => (rank(a.x.section) - rank(b.x.section)) || a.x.section.localeCompare(b.x.section) || (a.i - b.i)).map(o => o.x);
         }
         if (view === "wallpapers") return [];
+        if (view === "focus") {
+            const seen = [];
+            for (const id of Windows.runningAppIds()) {
+                const e = Apps.forAppId(id);
+                if (e && seen.indexOf(e.id) >= 0) continue;
+                if (e) seen.push(e.id);
+                if (!ql || Apps.fuzzy((e ? e.name : id), ql) > 0) out.push(focusItem(e, id, "Running now"));
+            }
+            for (const a of Apps.search(ql, ql ? 30 : 400)) if (seen.indexOf(a.id) < 0) out.push(focusItem(a, null, "Applications"));
+            if (!ql) { const rest = Apps.apps.filter(a => seen.indexOf(a.id) < 0 && !out.some(o => o.title === a.name)); for (const a of rest) out.push(focusItem(a, null, "Applications")); }
+            return out;
+        }
 
         // ---- root ----
         if (q.startsWith(">")) {
@@ -627,6 +653,7 @@ PopupLayer {
                     text: lnc.toast !== "" ? lnc.toast
                         : lnc.view === "root" ? "Tips: > run · ? web · / files · = maths"
                         : lnc.view === "wallpapers" ? "Theme and accent follow the wallpaper"
+                        : lnc.view === "focus" ? "Everything else disappears until you leave · Ctrl 1–5 picks a duration"
                         : lnc.view === "shortcuts" ? Keybinds.all.length + " shortcuts"
                         : lnc.quick ? "Release Super to switch · Tab / ⇧Tab to move" : lnc.count + " windows"
                     font.pixelSize: 12

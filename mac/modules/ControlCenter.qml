@@ -7,8 +7,9 @@ import Quickshell.Services.Mpris
 import qs.services
 import qs.widgets
 
-// Control Center (top-right). Pages: main · wifi · bluetooth · sound
-// Keys: Esc back/close · W Wi-Fi · B Bluetooth · S Sound · D Focus · A Keep Awake · ↑/↓ volume · M mute · Space play/pause
+// Control Center (top-right). Pages: main · wifi · bluetooth · tailscale · sound
+// Keys: Esc back/close · W Wi-Fi · B Bluetooth · T Tailscale · S Sound · D Focus · A Keep Awake · ↑/↓ volume · M mute · Space play/pause
+// Tailscale page: 1–9 switch account · N add account · C connect/disconnect
 PopupLayer {
     id: cc
     ns: "mac-panel"
@@ -21,10 +22,11 @@ PopupLayer {
     property string page: "main"
     property string hoverInfo: ""
     onOpenChanged: {
-        if (open) { page = "main"; Net.refresh(); Brightness.refresh(); focusItem.forceActiveFocus(); }
+        if (open) { page = Shell.ccPage; Shell.ccPage = "main"; Net.refresh(); Brightness.refresh(); focusItem.forceActiveFocus(); }
     }
     onPageChanged: {
         if (page === "wifi") Net.scan();
+        if (page === "tailscale") Tailscale.refresh();
         if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = page === "bluetooth";
         focusItem.forceActiveFocus();
     }
@@ -39,10 +41,17 @@ PopupLayer {
         focus: true
         Keys.onPressed: e => {
             if (cc.typing) return;
+            if (cc.page === "tailscale") {
+                const n = e.key - Qt.Key_1;
+                if (n >= 0 && n < 9 && n < Tailscale.accounts.length) { Tailscale.switchTo(Tailscale.accounts[n].id); e.accepted = true; return; }
+                if (e.key === Qt.Key_N) { Tailscale.addAccount(); e.accepted = true; return; }
+                if (e.key === Qt.Key_C) { Tailscale.toggle(); e.accepted = true; return; }
+            }
             switch (e.key) {
             case Qt.Key_Escape: cc.dismissed(); break;
             case Qt.Key_W: cc.page = cc.page === "wifi" ? "main" : "wifi"; break;
             case Qt.Key_B: cc.page = cc.page === "bluetooth" ? "main" : "bluetooth"; break;
+            case Qt.Key_T: cc.page = cc.page === "tailscale" ? "main" : "tailscale"; break;
             case Qt.Key_S: cc.page = cc.page === "sound" ? "main" : "sound"; break;
             case Qt.Key_D: Config.dnd = !Config.dnd; break;
             case Qt.Key_A: Config.keepAwake = !Config.keepAwake; break;
@@ -121,9 +130,10 @@ PopupLayer {
                         }
                         CCCircle {
                             icon: "vpn_lock"
-                            on: Net.tsUp
-                            onClicked: Net.toggleTailscale()
-                            onHoveredChanged: cc.hoverInfo = hovered ? "Tailscale · " + (Net.tsState === "" ? "Unavailable" : Net.tsUp ? "Connected" : "Disconnected") : ""
+                            on: Tailscale.up
+                            onClicked: cc.page = "tailscale"
+                            onRightClicked: Tailscale.toggle()
+                            onHoveredChanged: cc.hoverInfo = hovered ? "Tailscale · " + Tailscale.stateText() + (Tailscale.current ? " · " + Tailscale.label(Tailscale.current) : "") + " · T" : ""
                         }
                     }
                 }
@@ -297,13 +307,13 @@ PopupLayer {
                 }
                 T {
                     Layout.fillWidth: true
-                    text: cc.page === "wifi" ? "Wi-Fi" : cc.page === "bluetooth" ? "Bluetooth" : "Sound Output"
+                    text: cc.page === "wifi" ? "Wi-Fi" : cc.page === "bluetooth" ? "Bluetooth" : cc.page === "tailscale" ? "Tailscale" : "Sound Output"
                     font.pixelSize: 15; font.weight: Font.Bold
                 }
                 Switch {
-                    visible: cc.page === "wifi" || cc.page === "bluetooth"
-                    checked: cc.page === "wifi" ? Net.wifiEnabled : cc.btOn
-                    onToggled: v => { if (cc.page === "wifi") Net.setWifi(v); else if (cc.bt) cc.bt.enabled = v; }
+                    visible: cc.page === "wifi" || cc.page === "bluetooth" || (cc.page === "tailscale" && Tailscale.available)
+                    checked: cc.page === "wifi" ? Net.wifiEnabled : cc.page === "tailscale" ? Tailscale.up : cc.btOn
+                    onToggled: v => { if (cc.page === "wifi") Net.setWifi(v); else if (cc.page === "tailscale") Tailscale.setUp(v); else if (cc.bt) cc.bt.enabled = v; }
                 }
             }
 
@@ -444,6 +454,260 @@ PopupLayer {
                 }
             }
 
+            // Tailscale: this device · accounts · exit node · devices · options
+            ColumnLayout {
+                visible: cc.page === "tailscale"
+                Layout.fillWidth: true
+                spacing: 2
+
+                // This device (click copies the Tailscale IP)
+                Hoverable {
+                    id: selfRow
+                    Layout.fillWidth: true
+                    implicitHeight: 40
+                    onClicked: if (Tailscale.ip) cc.copy("self", Tailscale.ip)
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 8
+                        spacing: 9
+                        Rectangle {
+                            Layout.preferredWidth: 26; Layout.preferredHeight: 26; radius: 13
+                            color: Tailscale.up ? Theme.accent : Theme.field
+                            Sym { anchors.centerIn: parent; name: "vpn_lock"; filled: true; size: 15; color: Tailscale.up ? Theme.accentText : Theme.text }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+                            T { Layout.fillWidth: true; text: Tailscale.hostname || "This device"; font.pixelSize: 13; font.weight: Font.DemiBold }
+                            T { Layout.fillWidth: true; text: Tailscale.busy ? Tailscale.busy + "…" : Tailscale.stateText() + (Tailscale.up && Tailscale.ip ? " · " + Tailscale.ip : ""); font.pixelSize: 11; color: Theme.text2 }
+                        }
+                        T { visible: selfRow.hovered && Tailscale.ip !== ""; text: cc.copied === "self" ? "Copied" : "Copy IP"; font.pixelSize: 11; color: Theme.text3 }
+                    }
+                }
+                T {
+                    visible: Tailscale.error !== ""
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 6
+                    text: Tailscale.error; color: Theme.systemRed; font.pixelSize: 11
+                    wrapMode: Text.Wrap; maximumLineCount: 3
+                }
+                Hoverable {
+                    visible: Tailscale.denied
+                    Layout.fillWidth: true
+                    implicitHeight: grantText.implicitHeight + 12
+                    onClicked: { Shell.close(); Quickshell.execDetached([Config.terminal, "--hold", "-e", "bash", "-c", "sudo tailscale set --operator=\"$USER\" && echo && echo 'Done — Tailscale can now be managed from the Control Center.'"]); }
+                    T {
+                        id: grantText
+                        anchors.left: parent.left; anchors.right: parent.right
+                        anchors.leftMargin: 6; anchors.rightMargin: 6
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "Account switching needs operator access. Click to run <b>sudo tailscale set --operator=$USER</b>."
+                        textFormat: Text.StyledText
+                        wrapMode: Text.Wrap
+                        font.pixelSize: 11; color: Theme.systemOrange
+                    }
+                }
+
+                // Accounts
+                Section { visible: Tailscale.available; text: "Accounts" }
+                Repeater {
+                    model: cc.page === "tailscale" ? Tailscale.accounts : []
+                    delegate: Hoverable {
+                        id: acctRow
+                        required property var modelData
+                        required property int index
+                        readonly property bool sel: modelData.selected
+                        // The remove button sits above the row's MouseArea and takes its hover, so count both.
+                        readonly property bool hot: hovered || removeBtn.hovered
+                        Layout.fillWidth: true
+                        implicitHeight: 40
+                        onClicked: Tailscale.switchTo(modelData.id)
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 6
+                            anchors.rightMargin: 6
+                            spacing: 9
+                            Rectangle {
+                                Layout.preferredWidth: 26; Layout.preferredHeight: 26; radius: 13
+                                color: acctRow.sel ? Theme.accent : Theme.field
+                                T {
+                                    anchors.centerIn: parent
+                                    text: Tailscale.label(acctRow.modelData).charAt(0).toUpperCase()
+                                    font.pixelSize: 12; font.weight: Font.Bold
+                                    color: acctRow.sel ? Theme.accentText : Theme.text
+                                }
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+                                T { Layout.fillWidth: true; text: Tailscale.label(acctRow.modelData); font.pixelSize: 13; font.weight: acctRow.sel ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                T { Layout.fillWidth: true; text: Tailscale.sublabel(acctRow.modelData); font.pixelSize: 11; color: Theme.text2; elide: Text.ElideMiddle }
+                            }
+                            // Hover: remove (or log out of the active account); otherwise index shortcut + check.
+                            // Fixed width so swapping them doesn't shift the row under the cursor.
+                            Item {
+                                Layout.preferredWidth: 44
+                                Layout.fillHeight: true
+                                Row {
+                                    visible: !acctRow.hot
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: 6
+                                    Kbd { anchors.verticalCenter: parent.verticalCenter; visible: acctRow.index < 9 && Tailscale.accounts.length > 1; keys: [String(acctRow.index + 1)] }
+                                    Sym { anchors.verticalCenter: parent.verticalCenter; visible: acctRow.sel; name: "check"; size: 16; color: Theme.accent }
+                                }
+                                Hoverable {
+                                    id: removeBtn
+                                    visible: acctRow.hot
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 24; height: 24; radius: 12
+                                    Sym { anchors.centerIn: parent; name: acctRow.sel ? "logout" : "close"; size: 15; color: Theme.text2 }
+                                    onClicked: {
+                                        const a = acctRow.modelData;
+                                        const name = Tailscale.label(a);
+                                        Shell.close();
+                                        if (a.selected) Shell.ask({ title: "Log out of “" + name + "”?", body: "This device leaves the tailnet until you sign in again.", icon: "logout", confirm: "Log Out", destructive: true, action: () => Tailscale.logout() });
+                                        else Shell.ask({ title: "Remove “" + name + "”?", body: "You’ll need to sign in again to switch back to this account.", icon: "person_remove", confirm: "Remove", destructive: true, action: () => Tailscale.remove(a.id) });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Sign-in in progress
+                RowLayout {
+                    visible: Tailscale.signingIn
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 6
+                    Layout.rightMargin: 4
+                    Layout.preferredHeight: 34
+                    spacing: 9
+                    Sym { name: "open_in_browser"; size: 18; color: Theme.text2; Layout.preferredWidth: 26 }
+                    T { Layout.fillWidth: true; text: Tailscale.authUrl ? "Finish signing in in your browser" : "Starting sign-in…"; font.pixelSize: 12; color: Theme.text2; wrapMode: Text.Wrap }
+                    Hoverable {
+                        visible: Tailscale.authUrl !== ""
+                        implicitWidth: openLbl.implicitWidth + 16; implicitHeight: 24; radius: 12
+                        color: hovered ? Theme.tileHover : Theme.field
+                        T { id: openLbl; anchors.centerIn: parent; text: "Open"; font.pixelSize: 11 }
+                        onClicked: Tailscale.openAuthUrl()
+                    }
+                    Hoverable {
+                        implicitWidth: cancelLbl.implicitWidth + 16; implicitHeight: 24; radius: 12
+                        color: hovered ? Theme.tileHover : Theme.field
+                        T { id: cancelLbl; anchors.centerIn: parent; text: "Cancel"; font.pixelSize: 11 }
+                        onClicked: Tailscale.cancelSignIn()
+                    }
+                }
+                Hoverable {
+                    id: addRow
+                    visible: Tailscale.available && !Tailscale.signingIn
+                    Layout.fillWidth: true
+                    implicitHeight: 34
+                    onClicked: Tailscale.addAccount()
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+                        spacing: 9
+                        Rectangle {
+                            Layout.preferredWidth: 26; Layout.preferredHeight: 26; radius: 13
+                            color: Theme.field
+                            Sym { anchors.centerIn: parent; name: "add"; size: 16; color: Theme.text }
+                        }
+                        T { Layout.fillWidth: true; text: "Add Account…"; font.pixelSize: 13 }
+                        Kbd { keys: ["N"] }
+                    }
+                }
+
+                // Exit node
+                Section { visible: Tailscale.up && Tailscale.exitNodes.length > 0; text: "Exit Node" }
+                Repeater {
+                    model: cc.page === "tailscale" && Tailscale.up && Tailscale.exitNodes.length ? [null].concat(Tailscale.exitNodes) : []
+                    delegate: Hoverable {
+                        id: exitRow
+                        required property var modelData
+                        readonly property bool sel: modelData ? modelData.exitActive : !Tailscale.exitNode
+                        Layout.fillWidth: true
+                        implicitHeight: 30
+                        opacity: !modelData || modelData.online ? 1 : 0.5
+                        onClicked: if (!sel) Tailscale.setExitNode(modelData ? modelData.ip : "")
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 9
+                            Sym { name: exitRow.modelData ? "public" : "block"; size: 16; color: exitRow.sel ? Theme.accent : Theme.text2 }
+                            T { Layout.fillWidth: true; text: exitRow.modelData ? exitRow.modelData.name : "None"; font.pixelSize: 13; font.weight: exitRow.sel ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                            T { visible: !!exitRow.modelData && !exitRow.modelData.online; text: "Offline"; font.pixelSize: 11; color: Theme.text3 }
+                            Sym { visible: exitRow.sel; name: "check"; size: 16; color: Theme.accent }
+                        }
+                    }
+                }
+                OptionRow {
+                    visible: Tailscale.up && Tailscale.exitNode !== null
+                    label: "Allow Local Network Access"
+                    checked: !!Tailscale.prefs.ExitNodeAllowLANAccess
+                    onToggled: v => Tailscale.setPref("exit-node-allow-lan-access", v)
+                }
+
+                // Devices on the tailnet (click copies MagicDNS name)
+                Section {
+                    visible: Tailscale.up && Tailscale.peers.length > 0
+                    text: "Devices · " + Tailscale.peers.filter(p => p.online).length + " online"
+                }
+                Repeater {
+                    model: cc.page === "tailscale" && Tailscale.up ? Tailscale.peers.slice(0, 6) : []
+                    delegate: Hoverable {
+                        id: peerRow
+                        required property var modelData
+                        Layout.fillWidth: true
+                        implicitHeight: 30
+                        onClicked: cc.copy(modelData.id, modelData.dns || modelData.ip)
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 9
+                            Rectangle { Layout.preferredWidth: 8; Layout.preferredHeight: 8; radius: 4; color: peerRow.modelData.online ? Theme.systemGreen : Theme.text3 }
+                            T { Layout.fillWidth: true; text: peerRow.modelData.name; font.pixelSize: 13; elide: Text.ElideRight; color: peerRow.modelData.online ? Theme.text : Theme.text2 }
+                            T {
+                                text: cc.copied === peerRow.modelData.id ? "Copied" : peerRow.hovered ? "Copy name" : peerRow.modelData.ip
+                                font.pixelSize: 11; color: Theme.text3
+                            }
+                        }
+                    }
+                }
+                T {
+                    visible: Tailscale.up && Tailscale.peers.length > 6
+                    Layout.leftMargin: 8
+                    text: "+ " + (Tailscale.peers.length - 6) + " more in the admin console"
+                    font.pixelSize: 11; color: Theme.text3
+                }
+
+                // Options
+                Section { visible: Tailscale.available && !!Tailscale.current; text: "Options" }
+                OptionRow {
+                    visible: Tailscale.available && !!Tailscale.current
+                    label: "Use Tailscale DNS"
+                    checked: !!Tailscale.prefs.CorpDNS
+                    onToggled: v => Tailscale.setPref("accept-dns", v)
+                }
+                OptionRow {
+                    visible: Tailscale.available && !!Tailscale.current
+                    label: "Accept Subnet Routes"
+                    checked: !!Tailscale.prefs.RouteAll
+                    onToggled: v => Tailscale.setPref("accept-routes", v)
+                }
+                OptionRow {
+                    visible: Tailscale.available && !!Tailscale.current
+                    label: "Block Incoming Connections"
+                    checked: !!Tailscale.prefs.ShieldsUp
+                    onToggled: v => Tailscale.setPref("shields-up", v)
+                }
+            }
+
             // Sound outputs
             ColumnLayout {
                 visible: cc.page === "sound"
@@ -496,11 +760,12 @@ PopupLayer {
                     anchors.left: parent.left
                     anchors.leftMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
-                    text: cc.page === "wifi" ? "Wi-Fi Settings…" : cc.page === "bluetooth" ? "Bluetooth Settings…" : "Sound Settings…"
+                    text: cc.page === "wifi" ? "Wi-Fi Settings…" : cc.page === "bluetooth" ? "Bluetooth Settings…" : cc.page === "tailscale" ? "Tailscale Admin Console…" : "Sound Settings…"
                     font.pixelSize: 13
                 }
                 onClicked: {
                     Shell.close();
+                    if (cc.page === "tailscale") return Tailscale.adminConsole();
                     Shell.run(cc.page === "wifi" ? "nm-connection-editor" : cc.page === "bluetooth" ? "blueman-manager" : "pavucontrol");
                 }
             }
@@ -523,6 +788,9 @@ PopupLayer {
                     visible: cc.hoverInfo === "" || cc.page !== "main"
                     spacing: 10
                     Hint { visible: cc.page !== "main"; label: "Back"; keys: ["Esc"] }
+                    Hint { visible: cc.page === "tailscale" && Tailscale.accounts.length > 1; label: "Switch"; keys: ["1–" + Math.min(9, Tailscale.accounts.length)] }
+                    Hint { visible: cc.page === "tailscale"; label: "Add"; keys: ["N"] }
+                    Hint { visible: cc.page === "tailscale" && Tailscale.available; label: Tailscale.up ? "Disconnect" : "Connect"; keys: ["C"] }
                     Hint { visible: cc.page === "main"; label: "Wi-Fi"; keys: ["W"] }
                     Hint { visible: cc.page === "main"; label: "Bluetooth"; keys: ["B"] }
                     Hint { visible: cc.page === "main"; label: "Sound"; keys: ["S"] }
@@ -534,4 +802,29 @@ PopupLayer {
 
     property string pwTarget: ""
     property bool typing: false
+    property string copied: ""         // key of the row that just copied to the clipboard
+    Timer { id: copiedReset; interval: 1400; onTriggered: cc.copied = "" }
+    function copy(key, text) { Tailscale.copy(text); cc.copied = key; copiedReset.restart(); }
+
+    component Section: T {
+        Layout.fillWidth: true
+        Layout.leftMargin: 8
+        Layout.topMargin: 8
+        Layout.bottomMargin: 2
+        font.pixelSize: 11
+        font.weight: Font.DemiBold
+        color: Theme.text2
+    }
+    component OptionRow: RowLayout {
+        id: opt
+        property string label: ""
+        property bool checked: false
+        signal toggled(bool v)
+        Layout.fillWidth: true
+        Layout.leftMargin: 8
+        Layout.rightMargin: 6
+        Layout.preferredHeight: 30
+        T { Layout.fillWidth: true; text: opt.label; font.pixelSize: 13 }
+        Switch { checked: opt.checked; onToggled: v => { opt.toggled(v); checked = Qt.binding(() => opt.checked); } }
+    }
 }

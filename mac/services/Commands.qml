@@ -8,6 +8,7 @@ Singleton {
     id: root
     function sc(k) { return k; }
     readonly property var list: [
+        { id: "focus", title: "Deep Focus", sub: "Lock in on one app — everything else goes away", icon: "center_focus_strong", color: "#ff375f", keys: ["Super", "⇧", "D"], kw: "focus mode lock distraction pomodoro concentrate", view: "focus" },
         { id: "clipboard", title: "Clipboard History", sub: "Search, paste, pin and delete copied items", icon: "content_paste", color: "#ff9f0a", keys: ["Super", "V"], kw: "copy paste history", run: () => Shell.open("clipboard") },
         { id: "windows", title: "Switch Windows", sub: "Search all open windows", icon: "select_window", color: "#0a84ff", keys: ["Super", "Tab"], kw: "window switcher focus", view: "windows" },
         { id: "shortcuts", title: "Keyboard Shortcuts", sub: "Every shortcut, searchable", icon: "keyboard", color: "#8e8e93", keys: ["Super", "/"], kw: "keybinds help cheatsheet hotkeys", view: "shortcuts" },

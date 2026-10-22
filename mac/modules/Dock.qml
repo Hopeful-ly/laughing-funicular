@@ -20,6 +20,7 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Top
 
     readonly property string sname: screen ? screen.name : ""
+    visible: !Focus.active
     Component.onCompleted: Shell.registerDock(sname, dock)
     onSnameChanged: Shell.registerDock(sname, dock)
     readonly property int baseSize: 50
@@ -303,6 +304,7 @@ PanelWindow {
                     rows.push({ text: a.name, icon: "subdirectory_arrow_right", action: () => Apps.launchAction(it.entry, a) });
                 }
                 rows.push({ text: "Keep in Dock", icon: "keep", checked: Config.isPinned(it.entry.id), action: () => Config.togglePin(it.entry.id) });
+                rows.push({ text: "Deep Focus on " + cell.label, icon: "center_focus_strong", action: () => Focus.start(it.entry, it.appIds[0] || null, Config.focusMinutes) });
             }
             if (wins.length) {
                 rows.push({ text: "Bring All to This Workspace", icon: "move_down", action: () => { for (const t of wins) Windows.moveHere(t); } });

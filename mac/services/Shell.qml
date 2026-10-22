@@ -6,6 +6,7 @@ import Quickshell.Hyprland
 
 // Which panel is open, on which screen, plus IPC + global shortcuts.
 //   qs -c mac ipc call shell toggle launcher|clipboard|controlcenter|notifications|shortcuts|wallpapers|windows|calculator|session
+//   Control Center straight to a page: … toggle wifi|bluetooth|tailscale|sound
 //   Hyprland: hl.dsp.global("quickshell:<name>")
 Singleton {
     id: root
@@ -35,6 +36,7 @@ Singleton {
     }
 
     function open(name, screen) {
+        if (Focus.active) return;                 // Deep Focus: nothing else opens
         screenName = screen || focusedScreen();
         menuOpen = false;
         panel = name;
@@ -59,10 +61,23 @@ Singleton {
         interval: 90
         onTriggered: { const q = root._later; root._later = []; for (const f of q) f(); }
     }
+    // A click outside a popup clears its focus grab (closing it) and then
+    // lands on whatever was clicked. If that was the bar item that opened the
+    // popup, don't immediately reopen it.
+    property real _dismissAt: 0
+    property string _dismissed: ""
+    function noteDismiss() { _dismissAt = Date.now(); _dismissed = panel; }
+    function recentlyDismissed(name) { return _dismissed === name && Date.now() - _dismissAt < 350; }
     function toggle(name, screen) {
         const s = screen || focusedScreen();
         if (panel === name && screenName === s) close();
-        else open(name, s);
+        else if (!recentlyDismissed(name)) open(name, s);
+    }
+    // Page the Control Center opens on next (consumed by ControlCenter.qml).
+    property string ccPage: "main"
+    function toggleControlCenter(page, screen) {
+        if (panel !== "controlcenter") ccPage = page || "main";
+        toggle("controlcenter", screen);
     }
     function openLauncher(view, screen) {
         if (view !== "windows" || !launcherQuick) launcherQuick = false;
@@ -73,7 +88,7 @@ Singleton {
     function toggleLauncher(view) {
         view = view || "root";
         if (panel === "launcher" && launcherView === view) close();
-        else openLauncher(view);
+        else if (!recentlyDismissed("launcher")) openLauncher(view);
     }
     function isOpen(name, screen) { return panel === name && screenName === screen; }
 
@@ -84,6 +99,7 @@ Singleton {
     property bool menuOpen: false
     property bool menuAbove: false      // open upwards (dock)
     function showMenu(screen, x, y, items, above) {
+        if (Focus.active) return;
         menuItems = items;
         menuPos = Qt.point(x, y);
         menuScreen = screen;
@@ -116,6 +132,7 @@ Singleton {
             { text: "Control Center", icon: "tune", shortcut: "Super A", action: () => open("controlcenter", screen) },
             { text: "Keyboard Shortcuts", icon: "keyboard", shortcut: "Super /", action: () => openLauncher("shortcuts", screen) },
             { text: "Change Wallpaper…", icon: "wallpaper", shortcut: "Super ⇧ W", action: () => openLauncher("wallpapers", screen) },
+            { text: "Deep Focus…", icon: "center_focus_strong", shortcut: "Super ⇧ D", action: () => openLauncher("focus", screen) },
             { text: "Reload Shell", icon: "refresh", action: () => Quickshell.reload(true) },
             { separator: true },
             { text: "Sleep", icon: "bedtime", action: () => sleep() },
@@ -133,13 +150,15 @@ Singleton {
         function toggle(name: string): void {
             switch (name) {
             case "launcher": root.toggleLauncher("root"); break;
-            case "shortcuts": case "wallpapers": case "windows": case "calculator": root.toggleLauncher(name); break;
+            case "shortcuts": case "wallpapers": case "windows": case "calculator": case "focus": root.toggleLauncher(name); break;
             case "system": case "battery": case "disk": root.toggle(name); break;
             case "session": root.sessionMenu(root.focusedScreen(), 8, 0); break;
+            case "wifi": case "bluetooth": case "tailscale": case "sound": root.toggleControlCenter(name); break;
             default: root.toggle(name);
             }
         }
         function activate(): void { root.activateSelection(); }
+        function sleep(): void { root.sleep(); }   // power button (hypr/keybinds.lua)
         function close(): void { root.close(); root.hideMenu(); root.dialog = null; }
         function reloadTheme(): void { Theme.analyze(); }
     }
@@ -162,5 +181,6 @@ Singleton {
     GlobalShortcut { name: "notifications"; description: "Notification Center"; onPressed: root.toggle("notifications") }
     GlobalShortcut { name: "session"; description: "Session menu"; onPressed: root.sessionMenu(root.focusedScreen(), 8, 0) }
     GlobalShortcut { name: "logout"; description: "Log out (confirm)"; onPressed: root.askLogout() }
+    GlobalShortcut { name: "focuspick"; description: "Deep Focus: choose an app"; onPressed: root.toggleLauncher("focus") }
     GlobalShortcut { name: "dnd"; description: "Toggle Do Not Disturb"; onPressed: Config.dnd = !Config.dnd }
 }
